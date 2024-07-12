@@ -12,11 +12,15 @@ pip install streamlit
 ```
 - using python 3.9 (or after)
 
+- COHERE_API_KEY is used for rerank GenAI to provide more relevant docs 
+
+
 Change the global variable (globalvar.py)
 - Using the globalvar.example.py as sample
 ```
 cp globalvar.example.py globalvar.py
 ```
+- Update the corresponding VARs with actual env details
 
 
 To run
