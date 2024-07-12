@@ -1,4 +1,4 @@
-# It is HW GenAI reference 
+# It is HW GenAI demo 
 #
 
 The KB-HW-Vector code uses HeatWave 9.0 on OCI with Vector datatype and Vector functions with OCI Generative AI capability to parse web pages into segments.  
