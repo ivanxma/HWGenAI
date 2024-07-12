@@ -5,7 +5,11 @@ The KB-HW-Vector code uses HeatWave 9.0 on OCI with Vector datatype and Vector f
 Using OCI embedding model to convert the page into vector which is stored in HeatWave (Table : web_embeddings).  
 
 Pre-requisite :
-- install streamlit
+- install streamlit - https://docs.streamlit.io/get-started/installation
+  - example :
+```
+pip install streamlit
+```
 - using python 3.9 (or after)
 
 To run
