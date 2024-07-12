@@ -51,7 +51,7 @@ class Document():
       def __str__(self):
             return f"doc_id:{self.doc_id},doc_text:{self.doc_text},url:{self.url}"
 
-# Find relevant records from Oracle Vector DB using Dot Product similarity.
+# Find relevant records from DB using vector_distance function
 def search_data(cursor, query_vec, list_dict_docs, org):
 
     myvectorStr = ','.join(str(item) for item in query_vec)
