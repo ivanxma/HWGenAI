@@ -12,6 +12,13 @@ pip install streamlit
 ```
 - using python 3.9 (or after)
 
+Change the global variable (globalvar.py)
+- Using the globalvar.example.py as sample
+```
+cp globalvar.example.py globalvar.py
+```
+
+
 To run
 - change to the folder
 - execute
