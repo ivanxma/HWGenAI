@@ -13,6 +13,7 @@ import globalvar
 import streamlit as st
 
 os.environ['COHERE_API_KEY'] = globalvar.COHERE_API_KEY
+myconfig = globalvar.myconfig
 
 def getSQL(query) :
     if (query.find("```sql") != -1) :
@@ -62,7 +63,7 @@ examples = [
         "input": "List all employees.", 
         "query": "SELECT * FROM employees.employees;"},
     {
-        "input": "Find all managers'.",
+        "input": "List all managers'.",
         "query": "SELECT * FROM employees where Name = 'AC/DC');",
     },
     {
@@ -139,14 +140,6 @@ chain = create_sql_query_chain(llm, db, prompt)
 # chain.get_prompts()[0].pretty_print()
 
 
-
-myconfig = {
-    "user":"myroot",
-    "password":"MySQL8.0",
-    "host":"127.0.0.1",
-    "port":3340,
-    "database": "employees"
-}
 
 cnx = connectMySQL(myconfig)
 
