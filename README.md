@@ -22,13 +22,24 @@ cp globalvar.example.py globalvar.py
 ```
 - Update the corresponding VARs with actual env details
 
-
+## FOLDER : KB-HW-Vector
 To run
-- change to the folder
+- change to the folder KB-HW-Vector
 - execute
 ```
 streamlit run main.py
 ```
+## FOLDER : langchain
+
+It is about using langchain to run with MySQL using llm.
+Use streamlit to run
+
+## FOLDER cohere
+
+It is the demo python script to run with cohere API
+Run with python3.9+
 
 Reference :
 . https://blogs.oracle.com/ai-and-datascience/post/how-to-build-a-rag-solution-using-oci-generative-ai
+
+
