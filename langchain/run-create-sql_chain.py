@@ -45,7 +45,10 @@ def runSQL(theSQL, cnx) :
 
 st.title('🦜🔗 SQL Query Chain App')
 
-#cohere_api_key = st.sidebar.text_input('Cohere API Key', type='password')
+cohere_api_key = st.sidebar.text_input('Cohere API Key', value=globalvar.COHERE_API_KEY, type='password')
+
+include_tables = st.sidebar.text_area("Inlucde Tables", value='employees, departments, salaries, titles, dept_emp, dept_manager')
+include_tables_array=[ x .strip() for x in include_tables.split(',')]
 
 
 def generate_response(input_text, db):
@@ -133,7 +136,7 @@ db_port=globalvar.myconfig['port']
 db_name='employees'
 
 db = SQLDatabase.from_uri(f"mysql+mysqlconnector://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}", 
-    include_tables= ["employees", "departments",   "salaries", "titles",  "dept_emp", "dept_manager"],
+    include_tables= include_tables_array, 
     sample_rows_in_table_info=2, view_support=False)
 
 chain = create_sql_query_chain(llm, db, prompt)
