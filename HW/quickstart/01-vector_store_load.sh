@@ -7,7 +7,7 @@ create database if not exists quickstart;
 
 drop table if exists quickstart.quickstart_embeddings;
 
-call sys.VECTOR_STORE_LOAD('oci://HWdatalake@idazzjlcjqzj/genai/heatwave-gen-ai-getting-started.en.pdf', '{"schema_name": "quickstart", "table_name": "quickstart_embeddings"}');
+call sys.VECTOR_STORE_LOAD('oci://$region@$namespace/genai/heatwave-gen-ai-getting-started.en.pdf', '{"schema_name": "quickstart", "table_name": "quickstart_embeddings"}');
 
 
 EOL
