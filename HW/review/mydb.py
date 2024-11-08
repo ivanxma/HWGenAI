@@ -77,10 +77,10 @@ def delete_data(title):
 	c.close()
 	conn.close()
 
-def get_review_summary_by_title(title):
+def get_review_summary_by_title(title,lang):
 	conn = connectMySQL(myconfig)
 	c = conn.cursor(prepared=True)
-	c.execute('call SUMMARIZE_TRANSLATE("{}", "en")'.format(title) )
+	c.execute('call SUMMARIZE_TRANSLATE("{}", "{}")'.format(title, lang) )
 	data = c.fetchall()
 	myout = ''
 	if len(data) > 0:

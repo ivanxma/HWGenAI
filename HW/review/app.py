@@ -76,6 +76,12 @@ full_message_temp ="""
 
 HTML_WRAPPER = """<div style="overflow-x: auto; border: 1px solid #e6e9ef; border-radius: 0.25rem; padding: 1rem">{}</div>"""
 
+
+langChoices = {"en": "English", "de": "German", "fr": "French", "hi": "Hindi", "it": "Italian", "pt": "Portugues", "es": "Spanish", "th": "Thai"}
+
+def format_lang_func(option):
+    return langChoices[option]
+
 def main():
 	"""A Simple CRUD Review App"""
 	html_temp = """
@@ -103,8 +109,14 @@ def main():
 		all_titlesx = view_all_titles()
 		all_titles = [i[0] for i in all_titlesx]
 		postlist = st.sidebar.selectbox("Posts",all_titles)
+		langoption = st.selectbox(
+			"Languages",
+			options=list(langChoices.keys()), 
+			format_func=format_lang_func
+		)
+		st.text("")
 		if st.button("GenAI Summarize"):
-			review_summary = get_review_summary_by_title(postlist)
+			review_summary = get_review_summary_by_title(postlist, langoption)
 			st.markdown(review_message_temp.format(review_summary), unsafe_allow_html=True)
 		post_result = get_review_by_title(postlist)
 		for i in post_result:
