@@ -10,7 +10,7 @@ mysqlsh JS> util.importJson('Subscription_Boxes.jsonl', {schema:'reviewdb'})
 ```
 
 2. create schema
-
+```
 CREATE TABLE `myreview` (
   `asin` varchar(20) DEFAULT NULL,
   `review_text` text,
@@ -24,7 +24,10 @@ CREATE TABLE `myreview` (
   `myid` bigint NOT NULL AUTO_INCREMENT,
   PRIMARY KEY (`myid`)
 ) ENGINE=InnoDB
+```
 
 3. Insert data to myreview table with the JSON data
+```
 MySQL > insert into myreview select doc->>"$.asin", doc->>"$.text", doc->>"$.title", doc->>"$.rating", doc->>"$.user_id", from_unixtime(doc->>"$.timestamp"/1000), doc->>"$.parent_asign", doc->>"$.helpful_vote", doc->>"$.verified_purchase" from Subscription_Boxes;
+```
 
