@@ -79,8 +79,13 @@ HTML_WRAPPER = """<div style="overflow-x: auto; border: 1px solid #e6e9ef; borde
 
 langChoices = {"en": "English", "de": "German", "fr": "French", "hi": "Hindi", "it": "Italian", "pt": "Portugues", "es": "Spanish", "th": "Thai"}
 
+llmChoices = {"mistral-7b-instruct-v1": "mistral-7b-instruct-v1 (In-DB LLM)", "llama3-8b-instruct-v1": "llama3-8b-instruct-v1 (In-DB LLM)", "cohere.command-r-08-2024": "cohere.command-r-08-2024 (OCI LLM)", "cohere.command-r-plus-08-2024": "cohere.command-r-plus-08-2024 (OCI LLM)", "meta.llama-3.1-70b-instruct": "meta.llama-3.1-70b-instruct (OCI LLM)", "meta.llama-3.1-405b-instruct": "meta.llama-3.1-405b-instruct (OCI LLM)"}
+
 def format_lang_func(option):
     return langChoices[option]
+
+def format_llm_func(option):
+    return llmChoices[option]
 
 def main():
 	"""A Simple CRUD Review App"""
@@ -92,7 +97,7 @@ def main():
 	st.markdown(html_temp.format('royalblue','white'),unsafe_allow_html=True)
 		
 
-	menu = ["Home","View Post","Add Post","Search","Manage Review"]
+	menu = ["Home","Show Reviews","Add Review","Search","Manage Review"]
 	choice = st.sidebar.selectbox("Menu",menu)
 
 	if choice == "Home":
@@ -104,19 +109,24 @@ def main():
 			st.write(title_temp.format(i[0],i[1],short_article),unsafe_allow_html=True)
 
 		# st.write(result)
-	elif choice == "View Post":
-		st.subheader("View Post")
+	elif choice == "Show Reviews":
+		st.subheader("Reviews")
 		all_titlesx = view_all_titles()
 		all_titles = [i[0] for i in all_titlesx]
-		postlist = st.sidebar.selectbox("Posts",all_titles)
+		postlist = st.sidebar.selectbox("Products",all_titles)
 		langoption = st.selectbox(
 			"Languages",
 			options=list(langChoices.keys()), 
 			format_func=format_lang_func
 		)
+		llmoption = st.selectbox(
+			"LLM",
+			options=list(llmChoices.keys()), 
+			format_func=format_llm_func
+		)
 		st.text("")
 		if st.button("GenAI Summarize"):
-			review_summary = get_review_summary_by_title(postlist, langoption)
+			review_summary = get_review_summary_by_title(postlist, langoption, llmoption)
 			st.markdown(review_message_temp.format(review_summary), unsafe_allow_html=True)
 		post_result = get_review_by_title(postlist)
 		for i in post_result:
@@ -133,7 +143,7 @@ def main():
 			
 
 
-	elif choice == "Add Post":
+	elif choice == "Add Review":
 		st.subheader("Add Your Review")
 		review_asin  = st.text_input('Enter Product ID')
 		review_title = st.text_input('Enter Product Description')
