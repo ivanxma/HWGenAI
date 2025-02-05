@@ -7,7 +7,7 @@ create table mydemo.error_log engine=innodb secondary_engine=rapid select * from
 alter table mydemo.error_log secondary_load;
 
 select * from mydemo.errorlog into outfile with parameters '{ "file": [{"par":
-"https://objectstorage.uk-london-1.oraclecloud.com/p/KhiNmaq2c8tORrjYQxQNFpqTPeAkcimZsKXf4uK4tA4LQCk7IEtR6vL1pcWusrXh/n/idazzjlcjqzj/b/LONDON_BUCKET/o/",
+"https://the PAR for the bucket/",
 "prefix":"errorlog/"}],"dialect": { "format": "csv", "has_header" : true }}';
 
 
