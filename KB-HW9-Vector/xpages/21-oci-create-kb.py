@@ -12,7 +12,7 @@ import mysql.connector
 import globalvar
 
 # Constants
-mydb = globalvar.mydb
+org = globalvar.org
 compartment_id = globalvar.compartment_id
 CONFIG_PROFILE = "DEFAULT"
 
@@ -21,7 +21,10 @@ config = oci.config.from_file('~/.oci/config', CONFIG_PROFILE)
 # Service endpoint
 endpoint = globalvar.endpoint
 
+generative_ai_inference_client = oci.generative_ai_inference.GenerativeAiInferenceClient(config=config, service_endpoint=endpoint, retry_strategy=oci.retry.NoneRetryStrategy(), timeout=(10,240))
+
 headers = {"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.64 Safari/537.36 Edg/101.0.1210.47"}
+
 myconfig = globalvar.myconfig
 
 # Functions to interact with DB
@@ -31,71 +34,53 @@ def connectMySQL(myconfig):
     return cnx
     
 
-def create_table(cursor, amydb):
+
+def create_table(cursor, org):
+    
+    
+#    try:
+#     
+#        cursor.execute("""
+#            drop table if exists {test}.web_embeddings;
+#        """.format(test = org))
+#
+#    except Exception as error:
+#        print("Error dropping table for {org} : ".format(org=org), error)
+#   
+
     try:
 
         cursor.execute("""
-            create table if not exists {db}.web_embeddings (
+
+            create table if not exists {org}.web_embeddings (
                 id bigint unsigned auto_increment,
                 content varchar(4000),
+                vec vector(1024),
                 source_url varchar(4000),
-		vec vector(2048) null,
                 primary key (id)
-            )""".format(db=amydb))
+            )""".format(org=org))
 
-        cursor.execute("""
-            drop table if exists {db}.web_embeddings_trx 
-            """.format(db=amydb))
+    except:
 
-        cursor.execute("""
-            create table if not exists {db}.web_embeddings_trx (
-                id bigint unsigned,
-                content varchar(4000),
-                primary key (id)
-            )""".format(db=amydb))
+        print("Error while creating table for {org}".format(org=org))
 
-    except Exception as error :
-        print("Error while creating table for {db}".format(db=amydb), error)
 
-def insert_data(cursor, chunk, source_url, amydb):
+def insert_data(cursor, chunk, vec, source_url, org):
+
     try:  
-        mydata = ( chunk, source_url)
-        result = cursor.execute("INSERT INTO {db}.web_embeddings (content, source_url) VALUES (%s, %s)".format(db=amydb), mydata)
+        myvec2 = "; ".join(str(x) for x in vec)
+        myvec = myvec2[:1024]
+        myvectorStr = ','.join(str(item) for item in vec)
+        myvectorStr = '[' + myvectorStr + ']'
+
+        mydata = ( chunk, myvectorStr, source_url)
+        result = cursor.execute("INSERT INTO {org}.web_embeddings (content, vec, source_url) VALUES (%s,string_to_vector(%s), %s)".format(org=org), mydata)
+
         # connection.commit()
 
     except Exception as error:
+
         print("Error while inserting in DB : ", error)
-
-def get_last_id(cursor, amydb ):
-    last_id = 0 
-    try:  
-        result = cursor.execute("SELECT max(id) from {db}.web_embeddings".format(db=amydb))
-        data = cursor.fetchall()
-        print("data - ", data)
-        if (data is None) :
-          last_id = 0
-        else :
-          last_id = data[0][0]
-        print(last_id)
-
-    except Exception as error:
-        print("Error getting lastid  : ", error)
-
-    return last_id
-
-def call_embed_sp(cursor, amydb, aid):
-    try:  
-
-        result = cursor.execute("insert into {db}.web_embeddings_trx(id, content) SELECT id, content from {db}.web_embeddings where id > {last_id}".format(db=amydb, last_id=aid))
-        result = cursor.execute("""
-           call sys.ML_EMBED_TABLE("{db}.web_embeddings_trx.content", "{db}.web_embeddings_trx.vec", JSON_OBJECT("model_id", "multilingual-e5-small"))
-        """.format(db=amydb))
-        result = cursor.execute("update {db}.web_embeddings a, {db}.web_embeddings_trx b set a.vec = b.vec where a.id = b.id".format(db=amydb))
-
-        # connection.commit()
-
-    except Exception as error:
-        print("Error calling embedding SPs: ", error)
 
 # Data Preperation - Chunking
 
@@ -105,6 +90,7 @@ def parse_and_chunk_url_text(source_url):
     chunks = []
 
     try:
+
         elements = partition_html(url=formatted_url, headers=headers, skip_headers_and_footers=True)
 
     except  Exception as error:
@@ -136,22 +122,20 @@ def runSQL(theSQL, cnx) :
 
 # Data Preperation - Embedding
 
-def create_knowledge_base_from_client_content(amydb, contents, myurl):
+def create_knowledge_base_from_client_content(org, contents, myurl):
 
     connection = connectMySQL(myconfig)
     cursor = connection.cursor()
-    create_table(cursor=cursor, amydb = amydb)
-    print("creating embeddings for {db}".format(db=amydb))
+    create_table(cursor=cursor, org = org)
+    print("creating embeddings for {org}".format(org=org))
     len_of_contents = len(contents)
 
     start = 0
-
-    last_id = get_last_id(cursor, amydb)
-    if (last_id is None) :
-       last_id = 0
+    cursor_index = 0
 
     while start < len_of_contents:
 
+        embed_text_detail = oci.generative_ai_inference.models.EmbedTextDetails()
         content_subsets = contents[start:start+96]
         inputs = []
 
@@ -159,15 +143,30 @@ def create_knowledge_base_from_client_content(amydb, contents, myurl):
             if subset:
                 inputs.append(subset)
 
+        embed_text_detail.inputs = inputs
+        embed_text_detail.truncate = embed_text_detail.TRUNCATE_END
+        embed_text_detail.serving_mode = oci.generative_ai_inference.models.OnDemandServingMode(model_id="cohere.embed-multilingual-v3.0")
+        embed_text_detail.compartment_id = compartment_id
+        embed_text_detail.input_type = embed_text_detail.INPUT_TYPE_SEARCH_DOCUMENT
+
+        try:
+
+            embed_text_response = generative_ai_inference_client.embed_text(embed_text_detail)
+
+        except Exception as e:
+
+            print("Error while creating embeddings ", e)
+            embeddings = []
+            return(f"Error while creating embedding {e}")
+
+        else:
+
+            embeddings = embed_text_response.data.embeddings
+
         for i in range(len(inputs)):
-            insert_data(cursor,  inputs[i], myurl, amydb)
+            insert_data(cursor,  inputs[i], list(embeddings[i]), myurl, org)
 
         start = start + 96
-        
-
-    connection.commit()
-
-    call_embed_sp(cursor, amydb, last_id)
 
     connection.commit()
     cursor.close()
@@ -194,12 +193,12 @@ with st.form('my_form'):
             contents.append(text)
     
         # prepare knowledge base
-        mydata = create_knowledge_base_from_client_content(mydb, contents, myurl)
+        mydata = create_knowledge_base_from_client_content(org, contents, myurl)
         st.divider()
         # st.write(mydata)
         cnx = connectMySQL(myconfig)
         try :
-            result = runSQL("SELECT source_url, count(*) from {db}.web_embeddings group by source_url".format(db=mydb), cnx)
+            result = runSQL(f"SELECT source_url, count(*) from {org}.web_embeddings group by source_url", cnx)
             df = pd.DataFrame(result)
             st.write(df)
  

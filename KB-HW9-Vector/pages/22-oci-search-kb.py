@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import streamlit as st
+import json
 
 from unstructured.partition.html import partition_html
 from unstructured.chunking.title import chunk_by_title
@@ -14,16 +15,12 @@ import globalvar
 
 # Constants
 org = globalvar.org
+llm = globalvar.llm
+n_citations = globalvar.citations
+emb_modelid = globalvar.emb_modelid
 compartment_id = globalvar.compartment_id
 CONFIG_PROFILE = globalvar.CONFIG_PROFILE
-config = oci.config.from_file('~/.oci/config', CONFIG_PROFILE)
 
-# Service endpoint
-endpoint = globalvar.endpoint
-
-generative_ai_inference_client = oci.generative_ai_inference.GenerativeAiInferenceClient(config=config, service_endpoint=endpoint, retry_strategy=oci.retry.NoneRetryStrategy(), timeout=(10,240))
-
-cohere_client = cohere.Client(globalvar.COHERE_API_KEY)
 
 # MySQL Connectoin Profile
 myconfig = globalvar.myconfig
@@ -32,7 +29,6 @@ myconfig = globalvar.myconfig
 def connectMySQL(myconfig) :
     cnx = mysql.connector.connect(**myconfig)
     return cnx
-
 
 
 # Used to format response and return references
@@ -63,56 +59,47 @@ def search_data(cursor, query_vec, list_dict_docs, org):
         select *
         from {org}.web_embeddings a
         order by vector_distance(vec, string_to_vector(%s)) desc
-        LIMIT 10
-    """.format(org=org), [myvectorStr])
+        LIMIT {citations}
+    """.format(org=org,citations=n_citations), [myvectorStr])
 
 
 
     for row in cursor:
         id = row[0]
         text = row[1]
-        url = row[3]
+        url = row[2]
         temp_dict = {id:text}
         list_dict_docs.append(temp_dict)
         doc = Document(id, text, url)
-        #print(doc)
         relevant_docs.append(doc)
 
 
     return relevant_docs
 
 # OCI-LLM: Used to generate embeddings for question(s)
-def generate_embeddings_for_question(question_list):
+def generate_embeddings_for_question(cursor, question_list):
 
-    embed_text_detail = oci.generative_ai_inference.models.EmbedTextDetails()
-    embed_text_detail.inputs = question_list
-    embed_text_detail.input_type = embed_text_detail.INPUT_TYPE_SEARCH_QUERY
-    embed_text_detail.serving_mode = oci.generative_ai_inference.models.OnDemandServingMode(model_id="cohere.embed-multilingual-v3.0")
-    embed_text_detail.compartment_id = compartment_id
-    embed_text_response = generative_ai_inference_client.embed_text(embed_text_detail)
-    return embed_text_response
+    cursor.execute( """
+        select sys.ML_EMBED_ROW("%s", JSON_OBJECT("model_id", "{emb_modelid}") )
+    """.format(emb_modelid=emb_modelid), question_list)
+
+    data = cursor.fetchall()
+    
+    return data[0][0]
 
 # OCI-LLM: Used to prompt the LLM
-def query_llm_with_prompt(prompt):
+def query_llm_with_prompt(cursor, prompt):
 
-    cohere_generate_text_request = oci.generative_ai_inference.models.CohereLlmInferenceRequest()
-    cohere_generate_text_request.prompt = prompt
-    cohere_generate_text_request.is_stream = False
-    cohere_generate_text_request.max_tokens = 1000
-    cohere_generate_text_request.temperature = 0.75
-    cohere_generate_text_request.top_k = 5
-    cohere_generate_text_request.top_p = 0
+    newprompt = prompt.replace('"', "'")
+    cursor.execute( """
+        select sys.ML_GENERATE("{query}", JSON_OBJECT("task", "generation", "model_id", "{myllm}") )
+    """.format(query=newprompt,myllm=llm))
 
-    generate_text_detail = oci.generative_ai_inference.models.GenerateTextDetails()
-    generate_text_detail.serving_mode = oci.generative_ai_inference.models.OnDemandServingMode(model_id="cohere.command")
-    generate_text_detail.compartment_id = compartment_id
-    generate_text_detail.inference_request = cohere_generate_text_request
+    data = cursor.fetchall()
+    
+    return data[0][0]
 
-    generate_text_response = generative_ai_inference_client.generate_text(generate_text_detail)
 
-    llm_response_result = generate_text_response.data.inference_response.generated_texts[0].text
-
-    return llm_response_result
 
 # Perform RAG
 def answer_user_question(org, query):
@@ -120,37 +107,23 @@ def answer_user_question(org, query):
     question_list = []
     question_list.append(query)
            
-    embed_text_response = generate_embeddings_for_question(question_list)
-
-    question_vector = embed_text_response.data.embeddings[0]
-        
     with connectMySQL(myconfig)as db:
 
         cursor = db.cursor()
+        question_vector =  generate_embeddings_for_question(cursor, question_list)
         list_dict_docs = []
         #query vector db to search relevant records
         similar_docs = search_data(cursor, question_vector, list_dict_docs, org=org)
-
-        rerank_docs = []
-        for docs in similar_docs:
-            content = str(docs.doc_id) + ": " + docs.doc_text
-            rerank_docs.append(content)
-
-        #use cohere reranker to fetch top documents.
-        rerank_results = cohere_client.rerank(query=query, documents=rerank_docs, top_n=5, model='rerank-multilingual-v3.0', return_documents=True)
 
         #prepare documents for the prompt
         context_documents = []
         relevant_doc_ids = []
         similar_docs_subset=[]
 
-        myresult = rerank_results.results
-
-        for rerank_result in myresult:
-           my1 = rerank_result
-           doc_data = rerank_result.document.text
-           context_documents.append(doc_data)
-           relevant_doc_ids.append(doc_data.split(":")[0])
+        for docs in similar_docs:
+           content = str(docs.doc_id) + ": " + docs.doc_text
+           context_documents.append(docs.doc_text)
+           relevant_doc_ids.append(docs.doc_id)
 
 
         for docs in similar_docs:
@@ -163,16 +136,18 @@ def answer_user_question(org, query):
         prompt_template = '''
         Text: {documents} \n
         Question: {question} \n
-        Answer the question based on the text provided and also return the relevant document numbers where you found the answer. If the text doesn't contain the answer, reply that the answer is not available.
+        Answer the question in simple format based on the Text provided. If the Text does not contain the answer, reply that the answer is not available.
         '''
 
         prompt = prompt_template.format(question = query, documents = context_document)
 
-        llm_response_result = query_llm_with_prompt(prompt)
+        llm_response_result = query_llm_with_prompt(cursor, prompt)
         response = {}
         response['message'] = query
-        response['text'] = llm_response_result
-        response['documents'] = [{'id': doc.doc_id, 'snippet': doc.doc_text, 'url': doc.url } for doc in similar_docs_subset]
+        response_json = json.loads(llm_response_result)
+        response['text'] = response_json['text']
+        response['documents'] = [{'id': doc.doc_id, 'snippet': doc.doc_text, 'url': doc.url } for doc in similar_docs]
+
 
         return response
 
