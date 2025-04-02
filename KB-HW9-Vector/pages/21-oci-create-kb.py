@@ -71,12 +71,10 @@ def get_last_id(cursor, amydb ):
     try:  
         result = cursor.execute("SELECT max(id) from {db}.web_embeddings".format(db=amydb))
         data = cursor.fetchall()
-        print("data - ", data)
         if (data is None) :
           last_id = 0
         else :
           last_id = data[0][0]
-        print(last_id)
 
     except Exception as error:
         print("Error getting lastid  : ", error)
