@@ -177,7 +177,12 @@ def create_knowledge_base_from_client_content(amydb, contents, myurl):
 print("name: ", __name__)
 
 with st.form('my_form'):
-    myurl = st.text_area('Please put in URL : :', 'https://en.wikipedia.org/wiki/MySQL')
+    col1, col2 = st.columns(2)
+    with col1 :
+      myurl = st.text_area('Please put in URL : :', 'https://en.wikipedia.org/wiki/MySQL')
+    with col2 :
+      mydb = st.text_input(label="Database", value=mydb, max_chars=20 )
+
     submitted = st.form_submit_button('Submit')
 
     if submitted:

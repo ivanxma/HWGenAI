@@ -14,7 +14,7 @@ import mysql.connector
 import globalvar
 
 # Constants
-org = globalvar.org
+mydb = globalvar.mydb
 llm = globalvar.llm
 n_citations = globalvar.citations
 emb_modelid = globalvar.emb_modelid
@@ -48,7 +48,7 @@ class Document():
             return f"doc_id:{self.doc_id},doc_text:{self.doc_text},url:{self.url}"
 
 # Find relevant records from DB using vector_distance function
-def search_data(cursor, query_vec, list_dict_docs, org):
+def search_data(cursor, query_vec, list_dict_docs, amydb):
 
     myvectorStr = ','.join(str(item) for item in query_vec)
     myvectorStr = '[' + myvectorStr + ']'
@@ -57,10 +57,10 @@ def search_data(cursor, query_vec, list_dict_docs, org):
     mydata = ( myvectorStr )
     cursor.execute( """
         select *
-        from {org}.web_embeddings a
+        from {mydb}.web_embeddings a
         order by vector_distance(vec, string_to_vector(%s)) desc
         LIMIT {citations}
-    """.format(org=org,citations=n_citations), [myvectorStr])
+    """.format(mydb=amydb,citations=n_citations), [myvectorStr])
 
 
 
@@ -88,12 +88,12 @@ def generate_embeddings_for_question(cursor, question_list):
     return data[0][0]
 
 # OCI-LLM: Used to prompt the LLM
-def query_llm_with_prompt(cursor, prompt):
+def query_llm_with_prompt(cursor, prompt, allm):
 
     newprompt = prompt.replace('"', "'")
     cursor.execute( """
         select sys.ML_GENERATE("{query}", JSON_OBJECT("task", "generation", "model_id", "{myllm}") )
-    """.format(query=newprompt,myllm=llm))
+    """.format(query=newprompt,myllm=allm))
 
     data = cursor.fetchall()
     
@@ -102,7 +102,7 @@ def query_llm_with_prompt(cursor, prompt):
 
 
 # Perform RAG
-def answer_user_question(org, query):
+def answer_user_question(amydb, query, allm):
            
     question_list = []
     question_list.append(query)
@@ -113,7 +113,7 @@ def answer_user_question(org, query):
         question_vector =  generate_embeddings_for_question(cursor, question_list)
         list_dict_docs = []
         #query vector db to search relevant records
-        similar_docs = search_data(cursor, question_vector, list_dict_docs, org=org)
+        similar_docs = search_data(cursor, question_vector, list_dict_docs, amydb)
 
         #prepare documents for the prompt
         context_documents = []
@@ -136,12 +136,12 @@ def answer_user_question(org, query):
         prompt_template = '''
         Text: {documents} \n
         Question: {question} \n
-        Answer the question in simple format based on the Text provided. If the Text does not contain the answer, reply that the answer is not available.
+        Answer the question in simple format based on the Text provided. If the Text does not provide the answer, reply that the answer is not available.
         '''
 
         prompt = prompt_template.format(question = query, documents = context_document)
 
-        llm_response_result = query_llm_with_prompt(cursor, prompt)
+        llm_response_result = query_llm_with_prompt(cursor, prompt, allm)
         response = {}
         response['message'] = query
         response_json = json.loads(llm_response_result)
@@ -154,11 +154,18 @@ def answer_user_question(org, query):
 
 
 with st.form('my_form'):
-    text = st.text_area('Question : :', 'What is MySQL HeatWave?')
+    col1, col2 = st.columns(2)
+    with col1 :
+      text = st.text_area('Question : :', 'What is MySQL HeatWave?')
+    with col2 :
+      llm = st.selectbox('Choose LLM : ',
+         ("mistral-7b-instruct-v1", "llama3-8b-instruct-v1", "llama3-8b-instruct-v1",  "meta.llama-3.2-90b-vision-instruct", "meta.llama-3.3-70b-instruct", "cohere.command-r-08-2024", "cohere.command-r-plus-08-2024" ))
+      mydb = st.text_input(label="Database", value=mydb, max_chars=20 )
+    
     submitted = st.form_submit_button('Submit')
 
     if submitted:
-        myans = answer_user_question(org, text)
+        myans = answer_user_question(mydb, text, llm)
         # print(myans)
         st.divider()
         st.write(myans['text'])
