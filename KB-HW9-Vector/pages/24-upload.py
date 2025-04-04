@@ -117,9 +117,6 @@ with st.form('my_form'):
     with col2 :
       myfolder = st.text_input('Folder:', 'mypdf')
 
-    myllm = st.selectbox('Choose LLM : ',
-      ("mistral-7b-instruct-v1", "llama3-8b-instruct-v1", "llama3-8b-instruct-v1",  "meta.llama-3.2-90b-vision-instruct", "meta.llama-3.3-70b-instruct", "cohere.command-r-08-2024", "cohere.command-r-plus-08-2024" ))
-
 
     uploaded_files = st.file_uploader(
         "Choose a (CSV,PDF,HTML,DOC,PPT) file", accept_multiple_files=True
