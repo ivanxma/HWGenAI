@@ -73,9 +73,12 @@ def vector_store_load(cursor, abucket,anamespace,afolder,aobjectnames, aschema, 
     return datasets
 
 
-def upload_to_oci_object_storage(anamespace, afile, bucket_name, object_name):
+def upload_to_oci_object_storage(aprofile, afile, bucket_name, object_name):
     # Load the configuration from the default location (~/.oci/config)
-    config = from_file(profile_name="london-mysqleu")
+    config = from_file(profile_name=aprofile)
+
+    # Define namespace and bucket name
+    mynamespace = config['namespace']  # Tenancy ID is used as the namespace
 
     # Create an ObjectStorageClient instance
     client = ObjectStorageClient(config)
@@ -94,29 +97,24 @@ def upload_to_oci_object_storage(anamespace, afile, bucket_name, object_name):
         print(f"An error occurred: {e}")
         return False
 
-# Load the configuration from the default location (~/.oci/config)
-config = from_file(profile_name="london-mysqleu")
-
-# Create an ObjectStorageClient instance
-client = ObjectStorageClient(config)
-
-# Define namespace and bucket name
-mynamespace = config['namespace']  # Tenancy ID is used as the namespace
 
 with st.form('my_form'):
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1 :
       myschema = st.text_input('Vector Store Schema :', 'mydb')
     with col2 :
       mytable = st.text_input('Vector Store table :', 'mytable')
+    with col3 :
+      mymodel = st.selectbox('Choose embed model : ', ("minilm", "multilingual-e5-small"))
 
     
-    col1, col2 = st.columns(2)
+    col1, col2,col3 = st.columns(3)
     with col1 :
       mybucket = st.text_input('Object Storage Bucket :', 'myhw')
     with col2 :
       myfolder = st.text_input('Folder:', 'mypdf')
-
+    with col3 :
+      myprofile = st.text_input('OCI config profile:', 'london-mysqleu')
 
     uploaded_files = st.file_uploader(
         "Choose a (CSV,PDF,HTML,DOC,PPT) file", accept_multiple_files=True
@@ -127,7 +125,7 @@ with st.form('my_form'):
         for uploaded_file in uploaded_files:
             print(uploaded_file.name)
             object_name = myfolder + '/' + uploaded_file.name
-            if upload_to_oci_object_storage(mynamespace, uploaded_file, mybucket, object_name) :
+            if upload_to_oci_object_storage(myprofile, uploaded_file, mybucket, object_name) :
                print('uploaded successful')
 
         with connectMySQL(myconfig)as db:
