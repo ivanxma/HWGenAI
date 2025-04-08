@@ -60,17 +60,31 @@ def vector_store_load(cursor, abucket,anamespace,afolder,aobjectnames, aschema, 
       "schema_name": "{schema}", "table_name": "{table}", "description": "{desc}"
       '''.format(schema=aschema, table=atable, desc=adesc) + "}')"
 
+    call_string= """
+CREATE TABLE {schema}.{tablename} (
+  document_name varchar(1024) NOT NULL COMMENT 'RAPID_COLUMN=ENCODING=VARLEN',
+  metadata json NOT NULL COMMENT 'RAPID_COLUMN=ENCODING=VARLEN',
+  document_id int unsigned NOT NULL,
+  segment_number int unsigned NOT NULL,
+  segment varchar(1024) NOT NULL COMMENT 'RAPID_COLUMN=ENCODING=VARLEN',
+  segment_embedding vector(384) NOT NULL COMMENT 'RAPID_COLUMN=ENCODING=VARLEN' /*!80021 ENGINE_ATTRIBUTE '<"model": "minilm">' */,
+  PRIMARY KEY (`document_id`,`segment_number`)
+) ENGINE=Lakehouse DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='uploaded for testing' SECONDARY_ENGINE=RAPID /*!80021 ENGINE_ATTRIBUTE='<"file": [<"bucket": "{bucket}", "region": "uk-london-1", "pattern": "{folder}.{objectnames}", "namespace": "{namespace}">], "dialect": <"ocr": true, "format": "pdf", "language": "en">>' */
+""".format(tablename=atable, bucket=abucket, schema=aschema,namespace=anamespace, folder=afolder, objectnames=aobjectnames).replace('<', '{').replace('>', '}')
+
+    print(call_string)
+          
+
 
     print(call_string)
            
     cursor.execute( 'create database if not exists {dbname}'.format(dbname=aschema))
+    cursor.execute( call_string )
 
-    datasets = []
-    for rs in cursor.execute( call_string, multi=True  ) :
-      data = cursor.fetchall()
-      datasets.append(data)
+    rs = cursor.execute('ALTER TABLE {schema}.{table} secondary_load'.format(schema=aschema, table=atable))
 
-    return datasets
+
+    return rs 
 
 
 def upload_to_oci_object_storage(aprofile, afile, bucket_name, object_name):
@@ -79,6 +93,7 @@ def upload_to_oci_object_storage(aprofile, afile, bucket_name, object_name):
 
     # Define namespace and bucket name
     mynamespace = config['namespace']  # Tenancy ID is used as the namespace
+    print(mynamespace)
 
     # Create an ObjectStorageClient instance
     client = ObjectStorageClient(config)
@@ -86,7 +101,7 @@ def upload_to_oci_object_storage(aprofile, afile, bucket_name, object_name):
     try:
         with afile as file:
             # Upload the file
-            response = client.put_object(anamespace, bucket_name, object_name, file)
+            response = client.put_object(mynamespace, bucket_name, object_name, file)
             print(response)
             # print(f"Upload successful. ETag: {response.etag}")
             return True
@@ -96,6 +111,40 @@ def upload_to_oci_object_storage(aprofile, afile, bucket_name, object_name):
     except Exception as e:
         print(f"An error occurred: {e}")
         return False
+
+
+
+# Perform RAG 
+def summarize(aschema, atable ,  myllm):
+           
+           
+    with connectMySQL(myconfig)as db:
+        
+        cursor = db.cursor()
+        cursor.execute("set group_concat_max_len=60000")
+
+        call_string = """
+           select group_concat(segment order by segment_number) from {schema}.{table} 
+        """.format(schema=aschema, table=atable)
+
+        cursor.execute(call_string)
+        mydata = cursor.fetchall()
+        content = mydata[0][0].replace("'", "")
+
+        prompt_template = '''
+        Text: {documents} \n
+        Summarize the Text provided.
+        '''
+        
+        prompt = prompt_template.format( documents = content)
+        
+        llm_response_result = query_llm_with_prompt(cursor, prompt, myllm)
+        response = {}
+        response_json = json.loads(llm_response_result)
+        response['text'] = response_json['text']
+
+        print(response)
+        return response
 
 
 with st.form('my_form'):
@@ -119,6 +168,8 @@ with st.form('my_form'):
     uploaded_files = st.file_uploader(
         "Choose a (CSV,PDF,HTML,DOC,PPT) file", accept_multiple_files=True
     )
+    myllm = st.selectbox('Choose LLM : ',
+      ("mistral-7b-instruct-v1", "llama3-8b-instruct-v1", "llama3-8b-instruct-v1",  "meta.llama-3.2-90b-vision-instruct", "meta.llama-3.3-70b-instruct", "cohere.command-r-08-2024", "cohere.command-r-plus-08-2024" ))
     submitted = st.form_submit_button('Submit')
 
     if submitted:
@@ -133,8 +184,14 @@ with st.form('my_form'):
             if upload_to_oci_object_storage(myprofile, uploaded_file, mybucket, object_name) :
                print('uploaded successful')
 
+        firstfile = uploaded_files[0].name
+        print(firstfile)
         with connectMySQL(myconfig)as db:
           cursor = db.cursor()
           myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*', myschema, mytable, "uploaded for testing")
-          st.write(myans)
+          mysummary = summarize(myschema, mytable, myllm)
+          st.divider()
+          st.write(mysummary['text'])
+          st.divider()
+
     
