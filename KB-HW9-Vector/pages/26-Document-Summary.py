@@ -72,12 +72,8 @@ CREATE TABLE {schema}.{tablename} (
 ) ENGINE=Lakehouse DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='uploaded for testing' SECONDARY_ENGINE=RAPID /*!80021 ENGINE_ATTRIBUTE='<"file": [<"bucket": "{bucket}", "region": "uk-london-1", "pattern": "{folder}.{objectnames}", "namespace": "{namespace}">], "dialect": <"ocr": true, "format": "pdf", "language": "en">>' */
 """.format(tablename=atable, bucket=abucket, schema=aschema,namespace=anamespace, folder=afolder, objectnames=aobjectnames).replace('<', '{').replace('>', '}')
 
-    print(call_string)
+    # print(call_string)
           
-
-
-    print(call_string)
-           
     cursor.execute( 'create database if not exists {dbname}'.format(dbname=aschema))
     cursor.execute( call_string )
 
@@ -93,7 +89,6 @@ def upload_to_oci_object_storage(aprofile, afile, bucket_name, object_name):
 
     # Define namespace and bucket name
     mynamespace = config['namespace']  # Tenancy ID is used as the namespace
-    print(mynamespace)
 
     # Create an ObjectStorageClient instance
     client = ObjectStorageClient(config)
@@ -102,7 +97,6 @@ def upload_to_oci_object_storage(aprofile, afile, bucket_name, object_name):
         with afile as file:
             # Upload the file
             response = client.put_object(mynamespace, bucket_name, object_name, file)
-            print(response)
             # print(f"Upload successful. ETag: {response.etag}")
             return True
     except ServiceError as e:
@@ -123,17 +117,24 @@ def summarize(aschema, atable ,  myllm):
         cursor = db.cursor()
         cursor.execute("set group_concat_max_len=60000")
 
+        # call_string = """
+        #   select group_concat(segment order by segment_number) from {schema}.{table} 
+        # """.format(schema=aschema, table=atable)
+
         call_string = """
-           select group_concat(segment order by segment_number) from {schema}.{table} 
+           select segment from {schema}.{table}  order by segment_number
         """.format(schema=aschema, table=atable)
 
         cursor.execute(call_string)
         mydata = cursor.fetchall()
-        content = mydata[0][0].replace("'", "")
+        # content = mydata[0][0].replace("'", "")
+
+        content = '\n'.join(str(x[0].replace("'", "")) for x in mydata)
+        print( "Length of the content : ", len(content))
 
         prompt_template = '''
         Text: {documents} \n
-        Summarize the Text provided.
+        Summarize the Text provided in point form with summary at the beginning.
         '''
         
         prompt = prompt_template.format( documents = content)
@@ -143,7 +144,7 @@ def summarize(aschema, atable ,  myllm):
         response_json = json.loads(llm_response_result)
         response['text'] = response_json['text']
 
-        print(response)
+        # print(response)
         return response
 
 
@@ -169,7 +170,7 @@ with st.form('my_form'):
         "Choose a (CSV,PDF,HTML,DOC,PPT) file", accept_multiple_files=True
     )
     myllm = st.selectbox('Choose LLM : ',
-      ("mistral-7b-instruct-v1", "llama3-8b-instruct-v1", "llama3-8b-instruct-v1",  "meta.llama-3.2-90b-vision-instruct", "meta.llama-3.3-70b-instruct", "cohere.command-r-08-2024", "cohere.command-r-plus-08-2024" ))
+      ("mistral-7b-instruct-v1", "llama3-8b-instruct-v1",  "meta.llama-3.2-90b-vision-instruct", "meta.llama-3.3-70b-instruct", "cohere.command-r-08-2024", "cohere.command-r-plus-08-2024" ))
     submitted = st.form_submit_button('Submit')
 
     if submitted:
