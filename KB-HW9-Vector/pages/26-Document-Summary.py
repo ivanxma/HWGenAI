@@ -109,7 +109,7 @@ def upload_to_oci_object_storage(aprofile, afile, bucket_name, object_name):
 
 
 # Perform RAG 
-def summarize(aschema, atable ,  myllm):
+def summarize(aschema, atable ,  myllm, aprompt):
            
            
     with connectMySQL(myconfig)as db:
@@ -134,10 +134,10 @@ def summarize(aschema, atable ,  myllm):
 
         prompt_template = '''
         Text: {documents} \n
-        Summarize the Text provided in point form with summary at the beginning.
+        {prompt}
         '''
         
-        prompt = prompt_template.format( documents = content)
+        prompt = prompt_template.format( documents = content, prompt=aprompt)
         
         llm_response_result = query_llm_with_prompt(cursor, prompt, myllm)
         response = {}
@@ -147,6 +147,7 @@ def summarize(aschema, atable ,  myllm):
         # print(response)
         return response
 
+st.set_page_config(layout="wide")
 
 with st.form('my_form'):
     col1, col2, col3 = st.columns(3)
@@ -169,7 +170,11 @@ with st.form('my_form'):
     uploaded_files = st.file_uploader(
         "Choose a (CSV,PDF,HTML,DOC,PPT) file", accept_multiple_files=True
     )
-    myllm = st.selectbox('Choose LLM : ',
+    col1, col2 = st.columns(2)
+    with col1 :
+      myprompt = st.text_input('Prompt:', 'Summarize the Text provided in point form with summary at the beginning.')
+    with col2 :
+      myllm = st.selectbox('Choose LLM : ',
       ("mistral-7b-instruct-v1", "llama3-8b-instruct-v1",  "meta.llama-3.2-90b-vision-instruct", "meta.llama-3.3-70b-instruct", "cohere.command-r-08-2024", "cohere.command-r-plus-08-2024" ))
     submitted = st.form_submit_button('Submit')
 
@@ -190,7 +195,7 @@ with st.form('my_form'):
         with connectMySQL(myconfig)as db:
           cursor = db.cursor()
           myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*', myschema, mytable, "uploaded for testing")
-          mysummary = summarize(myschema, mytable, myllm)
+          mysummary = summarize(myschema, mytable, myllm, myprompt)
           st.divider()
           st.write(mysummary['text'])
           st.divider()
