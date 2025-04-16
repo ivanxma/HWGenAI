@@ -1,4 +1,5 @@
 import os
+import re
 import pandas as pd
 import streamlit as st
 import json
@@ -37,12 +38,21 @@ def connectMySQL(myconfig) :
 
 
 # OCI-LLM: Used to prompt the LLM
-def query_llm_with_prompt(cursor, prompt, allm):
+def query_llm_with_prompt(cursor, prompt, allm, aoptions):
+    ml_generate_options = {'max_tokens', 'temperature', 'top_k', 'top_p', 'repeat_penalty', 'frequency_penalty', 'presence_penalty', 'stop_sequences' }
+
+    myoptions = ""
+    for myitem in ml_generate_options :
+      if myitem in aoptions :
+        myoptions = myoptions + ', "' + myitem + '",' + str(aoptions[myitem])
 
     newprompt = prompt.replace('"', "'")
-    cursor.execute( """
-        select sys.ML_GENERATE("{query}", JSON_OBJECT("task", "generation", "model_id", "{myllm}", "max_tokens", 4000) )
-    """.format(query=newprompt,myllm=allm))
+    call_string = """
+        select sys.ML_GENERATE("{query}", JSON_OBJECT("task", "generation", "model_id", "{myllm}" {options}) )
+    """.format(query=newprompt,myllm=allm, options=myoptions)
+    print(call_string)
+
+    cursor.execute(call_string)
 
     data = cursor.fetchall()
     
@@ -110,6 +120,9 @@ def upload_to_oci_object_storage(aprofile, afile, bucket_name, object_name):
 
 # Perform RAG 
 def summarize(aschema, atable ,  myllm, aprompt):
+
+    pattern= r'(\n)\1+'
+    repl = r'\1'   
            
            
     with connectMySQL(myconfig)as db:
@@ -131,15 +144,20 @@ def summarize(aschema, atable ,  myllm, aprompt):
 
         content = '\n'.join(str(x[0].replace("'", "")) for x in mydata)
         print( "Length of the content : ", len(content))
+        content = re.sub(pattern, repl, content)
 
         prompt_template = '''
-        Text: {documents} \n
-        {prompt}
+        QUESTION: {prompt}
+        TEXT: {documents} \n
         '''
         
         prompt = prompt_template.format( documents = content, prompt=aprompt)
+        myoptions = {}
+
+        myoptions["temperature"] = 0
+        myoptions["max_tokens"] = 4000
         
-        llm_response_result = query_llm_with_prompt(cursor, prompt, myllm)
+        llm_response_result = query_llm_with_prompt(cursor, prompt, myllm, myoptions)
         response = {}
         response_json = json.loads(llm_response_result)
         response['text'] = response_json['text']
@@ -172,7 +190,7 @@ with st.form('my_form'):
     )
     col1, col2 = st.columns(2)
     with col1 :
-      myprompt = st.text_input('Prompt:', 'Summarize the Text provided in point form with summary at the beginning.')
+      myprompt = st.text_input('Prompt:', 'Summarize the TEXT provided in point and table format with summary at the beginning.')
     with col2 :
       myllm = st.selectbox('Choose LLM : ',
       ("mistral-7b-instruct-v1", "llama3-8b-instruct-v1",  "meta.llama-3.2-90b-vision-instruct", "meta.llama-3.3-70b-instruct", "cohere.command-r-08-2024", "cohere.command-r-plus-08-2024" ))
