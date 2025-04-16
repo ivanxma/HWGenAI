@@ -31,6 +31,11 @@ headers = {"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleW
 # MySQL Connectoin Profile
 myconfig = globalvar.myconfig
 
+
+def iff(cond, tvalue, fvalue) :
+    return tvalue if cond else fvalue
+
+
 # Used to connect to MySQL
 def connectMySQL(myconfig) :
     cnx = mysql.connector.connect(**myconfig)
@@ -70,6 +75,8 @@ def vector_store_load(cursor, abucket,anamespace,afolder,aobjectnames, aschema, 
       "schema_name": "{schema}", "table_name": "{table}", "description": "{desc}"
       '''.format(schema=aschema, table=atable, desc=adesc) + "}')"
 
+    myformat = aobjectnames.split('.')[1]
+
     call_string= """
 CREATE TABLE {schema}.{tablename} (
   document_name varchar(1024) NOT NULL COMMENT 'RAPID_COLUMN=ENCODING=VARLEN',
@@ -79,8 +86,8 @@ CREATE TABLE {schema}.{tablename} (
   segment varchar(1024) NOT NULL COMMENT 'RAPID_COLUMN=ENCODING=VARLEN',
   segment_embedding vector(384) NOT NULL COMMENT 'RAPID_COLUMN=ENCODING=VARLEN' /*!80021 ENGINE_ATTRIBUTE '<"model": "minilm">' */,
   PRIMARY KEY (`document_id`,`segment_number`)
-) ENGINE=Lakehouse DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='uploaded for testing' SECONDARY_ENGINE=RAPID /*!80021 ENGINE_ATTRIBUTE='<"file": [<"bucket": "{bucket}", "region": "uk-london-1", "pattern": "{folder}.{objectnames}", "namespace": "{namespace}">], "dialect": <"ocr": true, "format": "pdf", "language": "en">>' */
-""".format(tablename=atable, bucket=abucket, schema=aschema,namespace=anamespace, folder=afolder, objectnames=aobjectnames).replace('<', '{').replace('>', '}')
+) ENGINE=Lakehouse DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='uploaded for testing' SECONDARY_ENGINE=RAPID /*!80021 ENGINE_ATTRIBUTE='<"file": [<"bucket": "{bucket}", "region": "uk-london-1", "pattern": "{folder}.{objectnames}", "namespace": "{namespace}">], "dialect": <"ocr": true, "format": "{format}", "language": "en">>' */
+""".format(tablename=atable, bucket=abucket, schema=aschema,namespace=anamespace, folder=afolder, objectnames=aobjectnames, format=myformat).replace('<', '{').replace('>', '}')
 
     # print(call_string)
           
@@ -200,6 +207,7 @@ with st.form('my_form'):
       myllm = st.selectbox('Choose LLM : ',
       ("mistral-7b-instruct-v1", "llama3-8b-instruct-v1",  "meta.llama-3.2-90b-vision-instruct", "meta.llama-3.3-70b-instruct", "cohere.command-r-08-2024", "cohere.command-r-plus-08-2024" ))
     submitted = st.form_submit_button('Submit')
+    gext_html = gext_pdf = gext_doc = gext_ppt = gext_txt =  False
 
     if submitted:
         # Load the configuration from the default location (~/.oci/config)
@@ -207,17 +215,38 @@ with st.form('my_form'):
 
         # Define namespace and bucket name
         mynamespace = config['namespace']  # Tenancy ID is used as the namespace
+        ext_html = ext_pdf = ext_doc = ext_ppt = ext_txt =  False
         for uploaded_file in uploaded_files:
-            print(uploaded_file.name)
-            object_name = myfolder + '/' + uploaded_file.name
+            fname,fext = os.path.splitext(uploaded_file.name)
+            ext_pdf = (fext in {'.pdf'})
+            ext_doc = (fext in {'.doc', '.docx', '.rtf'})
+            ext_ppt = (fext in {'.ppt', '.pptx'} )
+            ext_txt = (fext in {'.txt', '.csv'})
+            ext_html = (fext in {'.html', '.htmlx'})
+
+            gext_pdf = ext_pdf if ext_pdf else gext_pdf
+            gext_doc = ext_doc if ext_doc else gext_doc
+            gext_ppt = ext_ppt if ext_ppt else gext_ppt
+            gext_txt = ext_txt if ext_txt else gext_txt
+            gext_html = ext_html if ext_html else gext_html
+
+            object_name = myfolder + '/' + uploaded_file.name + iff(ext_pdf, '.pdf', iff(ext_doc, '.doc', iff(ext_ppt, '.ppt', iff(ext_txt, '.txt', iff(ext_html, '.html', '')))))
             if upload_to_oci_object_storage(myprofile, uploaded_file, mybucket, object_name) :
                print('uploaded successful')
 
         firstfile = uploaded_files[0].name
-        print(firstfile)
         with connectMySQL(myconfig)as db:
           cursor = db.cursor()
-          myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*', myschema, mytable, "uploaded for testing")
+          if gext_pdf :
+             myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.pdf', myschema, mytable, "uploaded for testing")
+          if gext_doc :
+             myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.doc', myschema, mytable, "uploaded for testing")
+          if gext_txt :
+             myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.txt', myschema, mytable, "uploaded for testing")
+          if gext_ppt :
+             myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.ppt', myschema, mytable, "uploaded for testing")
+          if gext_html :
+             myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.html', myschema, mytable, "uploaded for testing")
           mysummary = summarize(myschema, mytable, myllm, myprompt)
           st.divider()
           st.write(mysummary['text'])
