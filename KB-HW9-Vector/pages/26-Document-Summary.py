@@ -121,8 +121,6 @@ def upload_to_oci_object_storage(aprofile, afile, bucket_name, object_name):
 # Perform RAG 
 def summarize(aschema, atable ,  myllm, aprompt):
 
-    pattern= r'(\n)\1+'
-    repl = r'\1'   
            
            
     with connectMySQL(myconfig)as db:
@@ -143,8 +141,15 @@ def summarize(aschema, atable ,  myllm, aprompt):
         # content = mydata[0][0].replace("'", "")
 
         content = '\n'.join(str(x[0].replace("'", "")) for x in mydata)
-        print( "Length of the content : ", len(content))
+
+        pattern= r'(\n)\1+'
+        repl = r'\1'   
         content = re.sub(pattern, repl, content)
+        pattern= r'( )\1+'
+        content = re.sub(pattern, repl, content)
+
+        print( "Length of the content : ", len(content))
+        print( "words of the content : ", len(content.split(' ')))
 
         prompt_template = '''
         QUESTION: {prompt}
