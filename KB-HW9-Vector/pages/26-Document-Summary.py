@@ -27,7 +27,18 @@ compartment_id = globalvar.compartment_id
 CONFIG_PROFILE = globalvar.CONFIG_PROFILE
 headers = {"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.64 Safari/537.36 Edg/101.0.1210.47"}
 # ml_generate_options = {'max_tokens', 'temperature', 'top_k', 'top_p', 'repeat_penalty', 'frequency_penalty', 'presence_penalty', 'stop_sequences' }
+
 ml_generate_options = {'max_tokens', 'temperature', 'top_k', 'top_p', 'repeat_penalty', 'frequency_penalty', 'presence_penalty'  }
+
+llm_map = {
+  "mistral-7b-instruct-v1": "mistral-7b-instruct-v1(in-DB LLM)",
+  "llama3-8b-instruct-v1": "llama3-8b-instruct-v1 (in-DB LLM)",
+  "meta.llama-3.2-90b-vision-instruct": "meta.llama-3.2-90b-vision-instruct (OCI LLM)",
+  "meta.llama-3.3-70b-instruct": "meta.llama-3.3-70b-instruct (OCI LLM)",
+  "cohere.command-r-08-2024": "cohere.command-r-08-2024 (OCI LLM)",
+  "cohere.command-r-plus-08-2024" : "cohere.command-r-plus-08-2024 (OCI LLM)"
+}
+
 
 
 # MySQL Connectoin Profile
@@ -167,10 +178,16 @@ def summarize(aschema, atable ,  myllm, aprompt):
         prompt = prompt_template.format( documents = content, prompt=aprompt)
         myoptions = {}
 
+
         myoptions["temperature"] = 0
         myoptions["max_tokens"] = 4000
         
-        llm_response_result = query_llm_with_prompt(cursor, prompt, myllm, myoptions)
+        if "mloptions" in st.session_state :
+           mloptions = st.session_state['mloptions']
+        else :
+           mloptions = myoptions
+        
+        llm_response_result = query_llm_with_prompt(cursor, prompt, myllm, mloptions)
         response = {}
         response_json = json.loads(llm_response_result)
         response['text'] = response_json['text']
@@ -198,15 +215,16 @@ with st.form('my_form'):
     with col3 :
       myprofile = st.text_input('OCI config profile:', 'london-mysqleu')
 
-    uploaded_files = st.file_uploader(
-        "Choose a (CSV,PDF,HTML,DOC,PPT) file, ONLY one type a time for 1 table :", accept_multiple_files=True
-    )
     col1, col2 = st.columns(2)
-    with col1 :
-      myprompt = st.text_input('Prompt:', 'Summarize the TEXT provided in point and table format with summary at the beginning.')
+    with col1:
+      uploaded_files = st.file_uploader(
+        "Choose a (CSV,PDF,HTML,DOC,PPT) file, ONLY one type a time for 1 table :", accept_multiple_files=True
+      )
     with col2 :
       myllm = st.selectbox('Choose LLM : ',
-      ("mistral-7b-instruct-v1", "llama3-8b-instruct-v1",  "meta.llama-3.2-90b-vision-instruct", "meta.llama-3.3-70b-instruct", "cohere.command-r-08-2024", "cohere.command-r-plus-08-2024" ))
+      ("mistral-7b-instruct-v1", "llama3-8b-instruct-v1",  "meta.llama-3.2-90b-vision-instruct", "meta.llama-3.3-70b-instruct", "cohere.command-r-08-2024", "cohere.command-r-plus-08-2024" ), format_func=llm_map.get)
+
+    myprompt = st.text_area('Prompt:', 'Summarize the TEXT provided in point and table format with summary at the beginning.')
     submitted = st.form_submit_button('Submit')
     gext_html = gext_pdf = gext_doc = gext_ppt = gext_txt =  False
 
