@@ -198,7 +198,7 @@ with st.form('my_form'):
       myprofile = st.text_input('OCI config profile:', 'london-mysqleu')
 
     uploaded_files = st.file_uploader(
-        "Choose a (CSV,PDF,HTML,DOC,PPT) file", accept_multiple_files=True
+        "Choose a (CSV,PDF,HTML,DOC,PPT) file, ONLY one type a time for 1 table :", accept_multiple_files=True
     )
     col1, col2 = st.columns(2)
     with col1 :
