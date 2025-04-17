@@ -26,6 +26,8 @@ emb_modelid = globalvar.emb_modelid
 compartment_id = globalvar.compartment_id
 CONFIG_PROFILE = globalvar.CONFIG_PROFILE
 headers = {"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.64 Safari/537.36 Edg/101.0.1210.47"}
+# ml_generate_options = {'max_tokens', 'temperature', 'top_k', 'top_p', 'repeat_penalty', 'frequency_penalty', 'presence_penalty', 'stop_sequences' }
+ml_generate_options = {'max_tokens', 'temperature', 'top_k', 'top_p', 'repeat_penalty', 'frequency_penalty', 'presence_penalty'  }
 
 
 # MySQL Connectoin Profile
@@ -44,7 +46,6 @@ def connectMySQL(myconfig) :
 
 # OCI-LLM: Used to prompt the LLM
 def query_llm_with_prompt(cursor, prompt, allm, aoptions):
-    ml_generate_options = {'max_tokens', 'temperature', 'top_k', 'top_p', 'repeat_penalty', 'frequency_penalty', 'presence_penalty', 'stop_sequences' }
 
     myoptions = ""
     for myitem in ml_generate_options :
@@ -252,4 +253,34 @@ with st.form('my_form'):
           st.write(mysummary['text'])
           st.divider()
 
-    
+myoptions = {}
+myoptions["temperature"] = 0
+myoptions["max_tokens"] = 4000
+
+
+if "mloptions" in st.session_state :
+   mloptions = st.session_state['mloptions']
+else :
+   mloptions = myoptions
+
+container1 = st.container(border=True)
+col0, col1,col2,col3,col4 = container1.columns(5)
+col0.text("Options")
+#col0.write(mloptions)
+option = col1.selectbox("options ", tuple(ml_generate_options), label_visibility='collapsed')
+option_value = col2.number_input("Value", 0, label_visibility='collapsed')
+add_button = col3.button('add', use_container_width=True)
+reset_button = col4.button('reset', use_container_width=True)
+
+if add_button:
+    myvalue = {option: option_value}
+    mloptions.update(myvalue)
+    st.session_state['mloptions'] = mloptions
+    col0.write(mloptions)
+
+if reset_button:
+    mloptions = myoptions
+    st.session_state['mloptions'] = mloptions
+    col0.empty()
+    col0.write(mloptions)
+
