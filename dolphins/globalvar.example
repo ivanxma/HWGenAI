@@ -1,0 +1,14 @@
+# Constants
+org = "mydb"
+mydb= "mydb"
+
+myconfig = {
+    "user":"admin",
+    "password":"test",
+    "host":"10.10.10.10
+    "port":3306,
+    "database": "mydb"
+}
+
+
+
