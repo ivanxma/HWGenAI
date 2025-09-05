@@ -112,6 +112,32 @@ CREATE TABLE {schema}.{tablename} (
     return rs 
 
 
+def delete_oci_objects(aprofile, afile, mybucketname, object_name):
+    # Load the configuration from the default location (~/.oci/config)
+    config = from_file(profile_name=aprofile)
+
+    # Define namespace and bucket name
+    mynamespace = config['namespace']  # Tenancy ID is used as the namespace
+
+    # Create an ObjectStorageClient instance
+    client = ObjectStorageClient(config)
+
+    listfiles = client.list_objects(mynamespace,mybucketname, prefix=object_name)
+    if not listfiles.data.objects:
+       print('No files found to be deleted')
+       return False    
+    else:
+       for filenames in listfiles.data.objects:
+          print(f'File in Bucket "{mybucketname}" to be deleted: "{filenames.name}"')
+       return True
+
+       for filenames in listfiles.data.objects:
+         client.delete_object(namespace, mybucketname,filenames.name)
+         print(f'deleted "{filenames.name}" from bucket "{mybucketname}"')
+
+
+
+
 def upload_to_oci_object_storage(aprofile, afile, bucket_name, object_name):
     # Load the configuration from the default location (~/.oci/config)
     config = from_file(profile_name=aprofile)
@@ -250,6 +276,8 @@ with st.form('my_form'):
             gext_html = ext_html if ext_html else gext_html
 
             object_name = myfolder + '/' + uploaded_file.name + iff(ext_pdf, '.pdf', iff(ext_doc, '.doc', iff(ext_ppt, '.ppt', iff(ext_txt, '.txt', iff(ext_html, '.html', '')))))
+            delete_oci_objects(myprofile, uploaded_file, mybucket, myfolder + '/') 
+
             if upload_to_oci_object_storage(myprofile, uploaded_file, mybucket, object_name) :
                print('uploaded successful')
 

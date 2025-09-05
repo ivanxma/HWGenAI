@@ -8,6 +8,7 @@ from unstructured.cleaners.core import clean
 
 import oci
 import mysql.connector
+from mydbtools import *
 
 import globalvar
 
@@ -24,12 +25,6 @@ endpoint = globalvar.endpoint
 headers = {"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.64 Safari/537.36 Edg/101.0.1210.47"}
 myconfig = globalvar.myconfig
 
-# Functions to interact with DB
-
-def connectMySQL(myconfig):
-    cnx = mysql.connector.connect(**myconfig)
-    return cnx
-    
 
 def create_table(cursor, amydb):
     try:
@@ -81,13 +76,13 @@ def get_last_id(cursor, amydb ):
 
     return last_id
 
-def call_embed_sp(cursor, amydb, aid):
+def call_embed_sp(cursor, amydb, aid,aembid):
     try:  
 
         result = cursor.execute("insert into {db}.web_embeddings_trx(id, content) SELECT id, content from {db}.web_embeddings where id > {last_id}".format(db=amydb, last_id=aid))
         result = cursor.execute("""
-           call sys.ML_EMBED_TABLE("{db}.web_embeddings_trx.content", "{db}.web_embeddings_trx.vec", JSON_OBJECT("model_id", "multilingual-e5-small"))
-        """.format(db=amydb))
+           call sys.ML_EMBED_TABLE("{db}.web_embeddings_trx.content", "{db}.web_embeddings_trx.vec", JSON_OBJECT("model_id", "{embid}"))
+        """.format(db=amydb, embid=aembid))
         result = cursor.execute("update {db}.web_embeddings a, {db}.web_embeddings_trx b set a.vec = b.vec where a.id = b.id".format(db=amydb))
 
         # connection.commit()
@@ -134,7 +129,7 @@ def runSQL(theSQL, cnx) :
 
 # Data Preperation - Embedding
 
-def create_knowledge_base_from_client_content(amydb, contents, myurl):
+def create_knowledge_base_from_client_content(amydb, contents, myurl, embid):
 
     connection = connectMySQL(myconfig)
     cursor = connection.cursor()
@@ -165,7 +160,7 @@ def create_knowledge_base_from_client_content(amydb, contents, myurl):
 
     connection.commit()
 
-    call_embed_sp(cursor, amydb, last_id)
+    call_embed_sp(cursor, amydb, last_id, embid)
 
     connection.commit()
     cursor.close()
@@ -175,13 +170,14 @@ def create_knowledge_base_from_client_content(amydb, contents, myurl):
 
 # Main Function
 print("name: ", __name__)
-
+st.set_page_config(layout="wide")
 with st.form('my_form'):
     col1, col2 = st.columns(2)
     with col1 :
       myurl = st.text_area('Please put in URL : :', 'https://en.wikipedia.org/wiki/MySQL')
     with col2 :
       mydb = st.text_input(label="Database", value=mydb, max_chars=20 )
+      embid = st.selectbox('Choose Embedding : ', getEmbModel())
 
     submitted = st.form_submit_button('Submit')
 
@@ -197,7 +193,7 @@ with st.form('my_form'):
             contents.append(text)
     
         # prepare knowledge base
-        mydata = create_knowledge_base_from_client_content(mydb, contents, myurl)
+        mydata = create_knowledge_base_from_client_content(mydb, contents, myurl, embid)
         st.divider()
         # st.write(mydata)
         cnx = connectMySQL(myconfig)

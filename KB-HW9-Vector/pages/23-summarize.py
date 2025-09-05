@@ -12,6 +12,7 @@ import cohere
 import mysql.connector
 
 import globalvar
+from mydbtools import *
 
 # Constants
 mydb = globalvar.mydb
@@ -112,8 +113,7 @@ def summarize_url(org, content, myllm):
 
 with st.form('my_form'):
     myurl = st.text_area('Please put in URL : :', 'https://en.wikipedia.org/wiki/MySQL')
-    myllm = st.selectbox('Choose LLM : ',
-      ("mistral-7b-instruct-v1", "llama3-8b-instruct-v1", "llama3-8b-instruct-v1",  "meta.llama-3.2-90b-vision-instruct", "meta.llama-3.3-70b-instruct", "cohere.command-r-08-2024", "cohere.command-r-plus-08-2024" ))
+    myllm = st.selectbox('Choose LLM : ', getLLMModel() )
     submitted = st.form_submit_button('Submit')
 
     if submitted:

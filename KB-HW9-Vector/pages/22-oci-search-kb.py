@@ -3,15 +3,10 @@ import pandas as pd
 import streamlit as st
 import json
 
-from unstructured.partition.html import partition_html
-from unstructured.chunking.title import chunk_by_title
-from unstructured.cleaners.core import clean
-
-import oci
-import cohere
 import mysql.connector
 
 import globalvar
+from mydbtools import *
 
 # Constants
 mydb = globalvar.mydb
@@ -21,15 +16,13 @@ emb_modelid = globalvar.emb_modelid
 compartment_id = globalvar.compartment_id
 CONFIG_PROFILE = globalvar.CONFIG_PROFILE
 
+LLMs='''
+select model_id  from sys.ML_SUPPORTED_LLMS where capabilities->>'$[0]'='GENERATION'
+'''
+
 
 # MySQL Connectoin Profile
 myconfig = globalvar.myconfig
-
-# Used to connect to MySQL
-def connectMySQL(myconfig) :
-    cnx = mysql.connector.connect(**myconfig)
-    return cnx
-
 
 # Used to format response and return references
 class Document():
@@ -77,11 +70,11 @@ def search_data(cursor, query_vec, list_dict_docs, amydb):
     return relevant_docs
 
 # OCI-LLM: Used to generate embeddings for question(s)
-def generate_embeddings_for_question(cursor, question_list):
+def generate_embeddings_for_question(cursor, question_list, embid):
 
     cursor.execute( """
         select sys.ML_EMBED_ROW("%s", JSON_OBJECT("model_id", "{emb_modelid}") )
-    """.format(emb_modelid=emb_modelid), question_list)
+    """.format(emb_modelid=embid), question_list)
 
     data = cursor.fetchall()
     
@@ -102,7 +95,7 @@ def query_llm_with_prompt(cursor, prompt, allm):
 
 
 # Perform RAG
-def answer_user_question(amydb, query, allm):
+def answer_user_question(amydb, query, allm, aemb):
            
     question_list = []
     question_list.append(query)
@@ -110,7 +103,7 @@ def answer_user_question(amydb, query, allm):
     with connectMySQL(myconfig)as db:
 
         cursor = db.cursor()
-        question_vector =  generate_embeddings_for_question(cursor, question_list)
+        question_vector =  generate_embeddings_for_question(cursor, question_list, aemb)
         list_dict_docs = []
         #query vector db to search relevant records
         similar_docs = search_data(cursor, question_vector, list_dict_docs, amydb)
@@ -158,14 +151,14 @@ with st.form('my_form'):
     with col1 :
       text = st.text_area('Question : :', 'What is MySQL HeatWave?')
     with col2 :
-      llm = st.selectbox('Choose LLM : ',
-         ("mistral-7b-instruct-v1",  "llama3-8b-instruct-v1",  "meta.llama-3.2-90b-vision-instruct", "meta.llama-3.3-70b-instruct", "cohere.command-r-08-2024", "cohere.command-r-plus-08-2024" ))
+      llm = st.selectbox('Choose LLM : ', getLLMModel())
+      emb = st.selectbox('Choose Embedding : ', getEmbModel())
       mydb = st.text_input(label="Database", value=mydb, max_chars=20 )
     
     submitted = st.form_submit_button('Submit')
 
     if submitted:
-        myans = answer_user_question(mydb, text, llm)
+        myans = answer_user_question(mydb, text, llm, emb)
         # print(myans)
         st.divider()
         st.write(myans['text'])
