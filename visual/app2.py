@@ -28,7 +28,7 @@ def answer_query_on_image(aquestion, allm, aimage):
 
     
 # Set title
-st.title("📷 Image Upload + Base64 App")
+st.title("📷 Image Upload and describe Image using Visual LLM") 
 
 # File uploader
 uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
@@ -36,22 +36,27 @@ uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png
 if uploaded_file is not None:
     # Open image
     image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", use_column_width=True)
+    col1, col2 = st.columns(2)
+    with col1 :
+      st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    # Convert image to base64
-    buffered = io.BytesIO()
-    image.save(buffered, format=image.format or "PNG")
-    img_bytes = buffered.getvalue()
-    img_base64 = base64.b64encode(img_bytes).decode()
+      # Convert image to base64
+      buffered = io.BytesIO()
+      image.save(buffered, format=image.format or "PNG")
+      img_bytes = buffered.getvalue()
+      img_base64 = base64.b64encode(img_bytes).decode()
 
     # Display the base64 string (optional)
-    with st.expander("📄 Show Base64 String"):
+      with st.expander("📄 Show Base64 String"):
         st.code(img_base64, language='text')
 
-    # Now you can use `img_base64` variable as needed
-    ans = answer_query_on_image("Describe the image", "meta.llama-3.2-90b-vision-instruct", img_base64)
-    response_json = json.loads(ans[0][0])
-    with st.expander("Describe the image"):
+    with col2 :
+      myquestion = st.text_input("Question about the image")
+      submitButton = st.button('Submit', use_container_width=True)
+      if submitButton :
+        # Now you can use `img_base64` variable as needed
+        ans = answer_query_on_image(myquestion, "meta.llama-3.2-90b-vision-instruct", img_base64)
+        response_json = json.loads(ans[0][0])
         st.text_area("The image", response_json['text'], 400)
 
 else:
