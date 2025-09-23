@@ -55,3 +55,19 @@ def getLLMModel() :
 
     return tuple(llmModels)
 
+def getVisionLLMModel() :
+    cnx = connectMySQL(myconfig)
+    llmModels=[]
+    try:
+        data = runSQL("""
+          select model_id, capabilities->>'$[0]' from sys.ML_SUPPORTED_LLMS where capabilities->>'$[0]'='GENERATION' and model_id like '%vision%'
+        """, cnx)
+        for row in data:
+           llmModels.append(row[0])
+
+    except Exception as error:
+        llmModels=[]
+        print("Error while inserting in DB : ", error)
+
+    return tuple(llmModels)
+
