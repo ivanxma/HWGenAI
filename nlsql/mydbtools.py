@@ -115,7 +115,7 @@ def getDB() :
     mylist=[]
     try:
         data = runSQL("""
-          select schema_name from information_schema.schemata 
+          select schema_name from information_schema.schemata where schema_name in ('airportdb', 'information_schema', 'employees', 'performance_schema')
         """, cnx)
         for row in data:
            mylist.append(row[0])

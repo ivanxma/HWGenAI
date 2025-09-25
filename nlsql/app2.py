@@ -44,7 +44,9 @@ with col1 :
   submitButton = st.button('Submit', use_container_width=True)
 with col2 :
   db = st.selectbox('Choose DB : ', getDB())
-  llm = st.selectbox('Choose LLM : ', getNLSQLLLMModel())
+  nlllmmodel = getNLSQLLLMModel()
+  myindex = nlllmmodel.index('meta.llama-3.3-70b-instruct')
+  llm = st.selectbox('Choose LLM : ', nlllmmodel, index=myindex)
 if submitButton :
         # Now you can use `img_base64` variable as needed
         ans = call_nlsql(myquestion, llm, db)
