@@ -78,13 +78,13 @@ def query_llm_with_prompt(cursor, prompt, allm, aoptions):
 
 
            
-def vector_store_load(cursor, abucket,anamespace,afolder,aobjectnames, aschema, atable, adesc) :
+def vector_store_load(cursor, abucket,anamespace,afolder,aobjectnames, aschema, atable, amodel, adesc) :
 
     call_string = '''
       call sys.VECTOR_STORE_LOAD(
       'oci://{bucket}@{namespace}/{folder}/{objectnames}',  '
       '''.format(bucket=abucket,namespace=anamespace,folder=afolder,objectnames=aobjectnames ) + '{' + '''
-      "schema_name": "{schema}", "table_name": "{table}", "description": "{desc}"
+      "schema_name": "{schema}", "table_name": "{table}", "description": "{desc}", "ocr": true 
       '''.format(schema=aschema, table=atable, desc=adesc) + "}')"
 
     myformat = aobjectnames.split('.')[1]
@@ -95,11 +95,11 @@ CREATE TABLE {schema}.{tablename} (
   metadata json NOT NULL COMMENT 'RAPID_COLUMN=ENCODING=VARLEN',
   document_id int unsigned NOT NULL,
   segment_number int unsigned NOT NULL,
-  segment varchar(1024) NOT NULL COMMENT 'RAPID_COLUMN=ENCODING=VARLEN',
-  segment_embedding vector(384) NOT NULL COMMENT 'RAPID_COLUMN=ENCODING=VARLEN' /*!80021 ENGINE_ATTRIBUTE '<"model": "minilm">' */,
+  segment longtext NOT NULL COMMENT 'RAPID_COLUMN=ENCODING=VARLEN',
+  segment_embedding vector(384) NOT NULL COMMENT 'RAPID_COLUMN=ENCODING=VARLEN' /*!80021 ENGINE_ATTRIBUTE '<"model": "{model}">' */,
   PRIMARY KEY (`document_id`,`segment_number`)
-) ENGINE=Lakehouse DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='uploaded for testing' SECONDARY_ENGINE=RAPID /*!80021 ENGINE_ATTRIBUTE='<"file": [<"bucket": "{bucket}", "region": "uk-london-1", "pattern": "{folder}.{objectnames}", "namespace": "{namespace}">], "dialect": <"ocr": true, "format": "{format}", "language": "en">>' */
-""".format(tablename=atable, bucket=abucket, schema=aschema,namespace=anamespace, folder=afolder, objectnames=aobjectnames, format=myformat).replace('<', '{').replace('>', '}')
+) ENGINE=Lakehouse DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='uploaded for testing' SECONDARY_ENGINE=RAPID /*!80021 ENGINE_ATTRIBUTE='<"file": [<"bucket": "{bucket}", "region": "uk-london-1", "pattern": "{folder}.{objectnames}", "namespace": "{namespace}">], "dialect": <"ocr": true, "format": "{format}", "language": "en", "document_parser_model": "meta.llama-3.2-90b-vision-instruct">>' */
+""".format(tablename=atable, bucket=abucket, schema=aschema,namespace=anamespace, folder=afolder, objectnames=aobjectnames, format=myformat,model=amodel).replace('<', '{').replace('>', '}')
 
     # print(call_string)
           
@@ -129,10 +129,9 @@ def delete_oci_objects(aprofile, afile, mybucketname, object_name):
     else:
        for filenames in listfiles.data.objects:
           print(f'File in Bucket "{mybucketname}" to be deleted: "{filenames.name}"')
-       return True
 
        for filenames in listfiles.data.objects:
-         client.delete_object(namespace, mybucketname,filenames.name)
+         client.delete_object(mynamespace, mybucketname,filenames.name)
          print(f'deleted "{filenames.name}" from bucket "{mybucketname}"')
 
 
@@ -166,12 +165,12 @@ def upload_to_oci_object_storage(aprofile, afile, bucket_name, object_name):
 # Perform RAG 
 def summarize(aschema, atable ,  myllm, aprompt):
 
-           
+    print("Summarize...")
            
     with connectMySQL(myconfig)as db:
         
         cursor = db.cursor()
-        cursor.execute("set group_concat_max_len=60000")
+        cursor.execute("set group_concat_max_len=600000")
 
         # call_string = """
         #   select group_concat(segment order by segment_number) from {schema}.{table} 
@@ -251,17 +250,23 @@ with st.form('my_form'):
       ("mistral-7b-instruct-v1", "llama3-8b-instruct-v1",  "meta.llama-3.2-90b-vision-instruct", "meta.llama-3.3-70b-instruct", "cohere.command-r-08-2024", "cohere.command-r-plus-08-2024" ), format_func=llm_map.get)
 
     myprompt = st.text_area('Prompt:', 'Summarize the TEXT provided in point and table format with summary at the beginning.')
+    myskip = st.checkbox("Skip Document Upload")
     submitted = st.form_submit_button('Submit')
     gext_html = gext_pdf = gext_doc = gext_ppt = gext_txt =  False
 
-    if submitted:
-        # Load the configuration from the default location (~/.oci/config)
-        config = from_file(profile_name=myprofile)
 
-        # Define namespace and bucket name
-        mynamespace = config['namespace']  # Tenancy ID is used as the namespace
-        ext_html = ext_pdf = ext_doc = ext_ppt = ext_txt =  False
-        for uploaded_file in uploaded_files:
+    if submitted:
+        print("myskip")
+        print(myskip)
+        # Load the configuration from the default location (~/.oci/config)
+        if not myskip :
+          config = from_file(profile_name=myprofile)
+          st.write("not skip")
+
+          # Define namespace and bucket name
+          mynamespace = config['namespace']  # Tenancy ID is used as the namespace
+          ext_html = ext_pdf = ext_doc = ext_ppt = ext_txt =  False
+          for uploaded_file in uploaded_files:
             fname,fext = os.path.splitext(uploaded_file.name)
             ext_pdf = (fext in {'.pdf'})
             ext_doc = (fext in {'.doc', '.docx', '.rtf'})
@@ -281,23 +286,23 @@ with st.form('my_form'):
             if upload_to_oci_object_storage(myprofile, uploaded_file, mybucket, object_name) :
                print('uploaded successful')
 
-        firstfile = uploaded_files[0].name
-        with connectMySQL(myconfig)as db:
-          cursor = db.cursor()
-          if gext_pdf :
-             myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.pdf', myschema, mytable, "uploaded for testing")
-          if gext_doc :
-             myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.doc', myschema, mytable, "uploaded for testing")
-          if gext_txt :
-             myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.txt', myschema, mytable, "uploaded for testing")
-          if gext_ppt :
-             myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.ppt', myschema, mytable, "uploaded for testing")
-          if gext_html :
-             myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.html', myschema, mytable, "uploaded for testing")
-          mysummary = summarize(myschema, mytable, myllm, myprompt)
-          st.divider()
-          st.write(mysummary['text'])
-          st.divider()
+          firstfile = uploaded_files[0].name
+          with connectMySQL(myconfig)as db:
+            cursor = db.cursor()
+            if gext_pdf :
+               myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.pdf', myschema, mytable, mymodel, "uploaded for testing")
+            if gext_doc :
+               myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.doc', myschema, mytable, mymodel, "uploaded for testing")
+            if gext_txt :
+               myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.txt', myschema, mytable, mymodel, "uploaded for testing")
+            if gext_ppt :
+               myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.ppt', myschema, mytable, mymodel, "uploaded for testing")
+            if gext_html :
+               myans = vector_store_load(cursor, mybucket, mynamespace, myfolder, '*.html', myschema, mytable, mymodel, "uploaded for testing")
+        mysummary = summarize(myschema, mytable, myllm, myprompt)
+        st.divider()
+        st.write(mysummary['text'])
+        st.divider()
 
 myoptions = {}
 myoptions["temperature"] = 0
